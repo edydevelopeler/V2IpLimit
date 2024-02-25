@@ -25,8 +25,8 @@ INVALID_EMAIL = [
 INVALID_IPS = ["1.1.1.1", "8.8.8.8", "0.0.0.0"]
 INACTIVE_USERS = []
 VALID_IPS = []
-IP_LOCATION = "Iran"
-DATE_TIME_ZONE = "Iran"
+IP_LOCATION = "Indonesia"
+DATE_TIME_ZONE = "Asia/Jakarta"
 
 
 def read_config():
