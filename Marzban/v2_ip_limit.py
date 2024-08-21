@@ -55,12 +55,12 @@ def read_config():
     PANEL_USERNAME = str(LOAD_CONFIG_JSON["PANEL_USERNAME"])
     PANEL_PASSWORD = str(LOAD_CONFIG_JSON["PANEL_PASSWORD"])
     PANEL_DOMAIN = str(LOAD_CONFIG_JSON["PANEL_DOMAIN"])
-    TIME_TO_CHECK = int(LOAD_CONFIG_JSON["TIME_TO_CHECK"])
+    TIME_TO_CHECK = int(LOAD_CONFIG_JSON["TIME_TO_CHECK"]) * 60
     SPECIAL_LIMIT = LOAD_CONFIG_JSON["SPECIAL_LIMIT"]
     try:
-        INACTIVE_DURATION = int(LOAD_CONFIG_JSON["INACTIVE_DURATION"])
+        INACTIVE_DURATION = int(LOAD_CONFIG_JSON.get("INACTIVE_DURATION", 0)) * 60
     except KeyError:
-        INACTIVE_DURATION = TIME_TO_CHECK - 5
+        INACTIVE_DURATION = TIME_TO_CHECK - 5 * 60
     try:
         SERVER_NAME = str(LOAD_CONFIG_JSON["SERVER_NAME"])
     except KeyError:
@@ -99,6 +99,9 @@ def read_config():
 
 read_config()
 
+# Mengonversi nilai ke menit untuk ditampilkan
+time_to_check_minutes = TIME_TO_CHECK // 60
+inactive_duration_minutes = INACTIVE_DURATION // 60
 
 def send_logs_to_telegram(message):
     """send logs to telegram"""
@@ -116,7 +119,7 @@ def send_logs_to_telegram(message):
         for message in shorter_messages:
             txt_s = str(message.strip())
             if SERVER_NAME:
-                txt_s = str("<b>" + SERVER_NAME + "</b>\n-------\n" + str(txt_s))
+                txt_s = str(str(txt_s))
             send_data = {
                 "chat_id": CHAT_ID,
                 "text": txt_s,
@@ -147,12 +150,20 @@ def telegram_log_parser(users_list):
         for email, user_ip_l, user_ip in sorted_data:
             if PRETTY_PRINT:
                 user_ip = ["- " + ip for ip in user_ip]
-                user_ip = "\n".join([""] + list(user_ip))
+                user_ip = "\n".join(user_ip)
+            else:
+                user_ip = "\n".join(user_ip)
+            
+            # Menghilangkan tanda kurung siku di awal dan akhir daftar IP
+            user_ip = user_ip.replace("[", "").replace("]", "")
+            
+            # Mengganti pemisah IP dari koma menjadi baris baru
+            user_ip = user_ip.replace(", ", "\n")
+
             active_users_t += (
-                f"\n {str(email)} <b>[ {str(user_ip_l)} ] IPs : </b> {str(user_ip)} "
+                f"\n {str(email)} <b>[ {str(user_ip_l)} ] IPs : </b>\n{str(user_ip)}"
             )
         return active_users_t
-
 
 def get_token():
     """get tokens for other apis"""
@@ -240,7 +251,15 @@ def enable_user():
             url = url.replace("https://", "http://")
             requests.put(url, data=json.dumps(status), headers=headers)
         index -= 1
-        message = f"\nenable user : {username}"
+        message = f"""
+━━━━━━━━━━━━━━━━━━
+  ❖ <b>NOTIF UNLOCK</b> ❖
+━━━━━━━━━━━━━━━━━━
+👀 Username : <code>{username}</code>
+🔐 Limit IP : <code>{LIMIT_NUMBER}</code>
+⏱ Action : 🟢 <code>Unlocked</code>
+━━━━━━━━━━━━━━━━━━
+<i>» notif otomatis MrZbNxIGH</i> ✨"""
         send_logs_to_telegram(message)
         write_log(message)
         read_disable_users()
@@ -283,10 +302,10 @@ def disable_user(user_email_v2):
         requests.put(url, data=json.dumps(status), headers=headers)
     add_disable_user(user_email_v2)
     INACTIVE_USERS.append(user_email_v2)
-    message = f"\ndisable user : {username}"
-    send_logs_to_telegram(message)
-    write_log(message)
-    print(message)
+#    message = f""
+#    send_logs_to_telegram(message)
+#    write_log(message)
+#    print(message)
 
 
 # If there was a problem in deactivating users you can activate all users by :
@@ -374,7 +393,7 @@ async def get_logs(id=0):
                     async with websockets.connect(
                         f"wss://{PANEL_DOMAIN}/api/core/logs?interval=0.7&token={get_token()}"
                     ) as ws:
-                        message = "Establishing connection main server"
+                        message = ""
                         send_logs_to_telegram(message)
                         print(message)
                         while True:
@@ -386,7 +405,7 @@ async def get_logs(id=0):
                     async with websockets.connect(
                         f"ws://{PANEL_DOMAIN}/api/core/logs?interval=0.7&token={get_token()}"
                     ) as ws:
-                        message = "Establishing connection main server"
+                        message = ""
                         send_logs_to_telegram(message)
                         print(message)
                         while True:
@@ -551,7 +570,21 @@ def job():
             if email not in EXCEPT_USERS:
                 disable_user(email)
                 print("too much ip [", email, "]", " --> ", user_ip)
-                full_log = f"\n{country_time}\nWarning: user {email} is associated with {len(user_ip)} IPs: {user_ip}"
+                full_log = f"""
+━━━━━━━━━━━━━━━━━━
+  ❖ <b>NOTIF MULTI LOGIN</b> ❖
+━━━━━━━━━━━━━━━━━━
+👀 Username : <code>{email}</code>
+🔐 Limit IP : <code>{LIMIT_NUMBER}</code>
+📊 Multi Login IP: <code>{len(user_ip)}</code>
+🗓 Date : <code>{country_time}</code>
+⏱ Action : 🔴 <code>Locked {inactive_duration_minutes} Minutes</code>
+-----------------❏ <b>LOGS</b> ❏-----------------
+<code>{user_ip}</code>
+-----------------------------------------
+<i>» info : akun otomatis unlock</i> 🔓
+<i>» notif otomatis MrZbNxIGH</i> ✨
+━━━━━━━━━━━━━━━━━━"""
                 send_logs_to_telegram(full_log)
                 log_sn = str("\n" + active_users + full_log)
                 write_log(log_sn)
@@ -559,18 +592,6 @@ def job():
         print(email, user_ip, "Number of active IPs -->", len(user_ip))
     full_log = f"{full_report}\n{country_time}\nall active users(IPs) : [ {using_now} ]"
     full_report_t = telegram_log_parser(active_users_tl)
-    full_log_t = f"{full_report_t}\n-------\n{country_time}\n<b>all active users(IPs) : [ {using_now} ]</b>"
-    if using_now != 0:
-        write_log(full_log)
-        send_logs_to_telegram(full_log_t)
-        print(
-            f"--------------------------------\n{country_time}"
-            + f"\nall active users(IPs) : [ {using_now} ]"
-        )
-    else:
-        no_active_user_msg = "There is no active user"
-        send_logs_to_telegram(no_active_user_msg)
-        print(no_active_user_msg)
     using_now = 0
     clear_data()
 
@@ -584,7 +605,7 @@ def delete_valid_list():
 
 
 def enable_user_th():
-    """run enable user func"""
+    """run unlock user func"""
     while True:
         time.sleep(INACTIVE_DURATION)
         enable_user()
@@ -680,7 +701,3 @@ while True:
         write_log("\n" + str(ex))
         print(str(ex))
         time.sleep(10)
-
-# |------------------------------------|
-# | https://github.com/houshmand-2005/ |
-# |------------------------------------|
